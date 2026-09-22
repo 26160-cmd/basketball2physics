@@ -1,0 +1,1129 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>농구 슈팅 물리 시뮬레이션</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: radial-gradient(ellipse at top, #1a1c2e 0%, #0a0b14 60%, #050509 100%);
+    color: #e8e8f0;
+    font-family: 'Segoe UI', 'Pretendard', 'Malgun Gothic', sans-serif;
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    padding: 28px 16px 60px;
+  }
+
+  .container { width: 100%; max-width: 960px; }
+
+  h1 {
+    text-align: center;
+    font-size: 26px;
+    font-weight: 700;
+    margin-bottom: 4px;
+    background: linear-gradient(90deg, #ff8a3d, #ff5e3a);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    letter-spacing: -0.5px;
+  }
+
+  .subtitle { text-align: center; color: #7a7d94; font-size: 13px; margin-bottom: 24px; }
+
+  .panel {
+    background: linear-gradient(145deg, #15172a, #101223);
+    border: 1px solid #262a45;
+    border-radius: 18px;
+    padding: 22px 26px;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.03);
+  }
+
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 22px;
+    align-items: center;
+    margin-bottom: 20px;
+  }
+
+  .control-group { flex: 1 1 200px; min-width: 190px; }
+
+  .control-group label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 13.5px;
+    color: #b6b9d0;
+    margin-bottom: 8px;
+    font-weight: 500;
+  }
+
+  .control-group label span.val { color: #ff8a3d; font-weight: 700; }
+
+  input[type="range"] {
+    width: 100%;
+    -webkit-appearance: none;
+    height: 6px;
+    border-radius: 4px;
+    background: #262a45;
+    outline: none;
+  }
+
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 18px; height: 18px; border-radius: 50%;
+    background: linear-gradient(145deg, #ff9a52, #ff5e3a);
+    cursor: pointer;
+    box-shadow: 0 0 0 4px rgba(255,94,58,0.18);
+    border: 2px solid #0f1120;
+  }
+  input[type="range"]::-moz-range-thumb {
+    width: 18px; height: 18px; border-radius: 50%;
+    background: linear-gradient(145deg, #ff9a52, #ff5e3a);
+    cursor: pointer; border: 2px solid #0f1120;
+  }
+  input[type="range"]:disabled::-webkit-slider-thumb { opacity: 0.5; }
+
+  .btn-row { display: flex; gap: 10px; flex: 0 0 auto; }
+
+  #shootBtn, #replayBtn {
+    padding: 14px 28px;
+    font-size: 14.5px;
+    font-weight: 700;
+    border: none;
+    border-radius: 12px;
+    cursor: pointer;
+    letter-spacing: 0.3px;
+    transition: transform 0.12s ease, box-shadow 0.12s ease, opacity 0.2s ease;
+  }
+  #shootBtn {
+    color: #10111f;
+    background: linear-gradient(145deg, #ffb066, #ff6a3a);
+    box-shadow: 0 6px 18px rgba(255, 106, 58, 0.35);
+  }
+  #shootBtn:hover { transform: translateY(-2px); box-shadow: 0 10px 24px rgba(255,106,58,0.45); }
+  #replayBtn {
+    color: #b6b9d0;
+    background: #1c1e38;
+    border: 1px solid #33365a;
+  }
+  #replayBtn:hover:not(:disabled) { transform: translateY(-2px); border-color: #ff8a3d; color: #ff8a3d; }
+  #shootBtn:disabled, #replayBtn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+  .stats-bar { display: flex; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+  .stat {
+    flex: 1 1 90px;
+    background: #121423;
+    border: 1px solid #262a45;
+    border-radius: 10px;
+    padding: 9px 6px;
+    text-align: center;
+    transition: box-shadow 0.2s ease, border-color 0.2s ease;
+  }
+  .stat .stat-num { display: block; font-size: 18px; font-weight: 700; color: #e8e8f0; }
+  .stat .stat-label { display: block; font-size: 10.5px; color: #7a7d94; margin-top: 2px; }
+  .stat.streak-hot { border-color: #ff6a3a; box-shadow: 0 0 14px rgba(255, 106, 58, 0.45); }
+  .stat.streak-hot .stat-num { color: #ff8a3d; animation: pulse 0.9s ease-in-out infinite; }
+
+  @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.15); } }
+
+  .history-row { display: flex; gap: 6px; align-items: center; justify-content: center; margin-bottom: 16px; min-height: 16px; }
+  .hist-dot { width: 14px; height: 14px; border-radius: 50%; border: 1.5px solid rgba(255,255,255,0.15); flex: 0 0 auto; }
+  .hist-dot.swish { background: #4ade80; box-shadow: 0 0 6px rgba(74,222,128,0.6); }
+  .hist-dot.rim { background: #fbbf24; }
+  .hist-dot.miss { background: #3a3d55; }
+
+  #canvasWrap {
+    background: #0b0c17;
+    border-radius: 14px;
+    border: 1px solid #23263f;
+    overflow: hidden;
+    display: flex;
+    justify-content: center;
+  }
+
+  canvas { display: block; max-width: 100%; height: auto; }
+
+  .info-panel { display: grid; grid-template-columns: 1fr 1fr 1.4fr; gap: 14px; margin-top: 20px; }
+  .info-card { background: #121423; border: 1px solid #262a45; border-radius: 12px; padding: 14px 16px; text-align: center; }
+  .info-card .label { display: block; font-size: 11.5px; color: #7a7d94; margin-bottom: 6px; letter-spacing: 0.3px; text-transform: uppercase; }
+  .info-card .value { display: block; font-size: 21px; font-weight: 700; color: #e8e8f0; }
+  #resultCard .value { font-size: 18px; }
+  #resultCard .detail { display:block; font-size: 11.5px; color:#9a9db4; margin-top:4px; font-weight:400; }
+
+  .result-swish .value { color: #4ade80; }
+  .result-rim .value { color: #fbbf24; }
+  .result-short .value { color: #f87171; }
+  .result-wait .value { color: #7a7d94; }
+
+  @media (max-width: 640px) { .info-panel { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>🏀 농구 슈팅 물리 시뮬레이션</h1>
+  <p class="subtitle">각도·파워·거리 조절 + 충돌 반사 물리 · 사실적인 슈팅 동작 · 사운드 · 리플레이</p>
+
+  <div class="panel">
+    <div class="controls">
+      <div class="control-group">
+        <label>슈팅 각도 (Angle) <span class="val" id="angleValue">50°</span></label>
+        <input type="range" id="angleSlider" min="30" max="80" step="1" value="50">
+      </div>
+      <div class="control-group">
+        <label>슛 파워 (Power) <span class="val" id="powerValue">8.5 m/s</span></label>
+        <input type="range" id="powerSlider" min="6" max="11" step="0.1" value="8.5">
+      </div>
+      <div class="control-group">
+        <label>골대까지의 거리 (Distance) <span class="val" id="distanceValue">5.0 m</span></label>
+        <input type="range" id="distanceSlider" min="3" max="9" step="0.1" value="5">
+      </div>
+      <div class="btn-row">
+        <button id="shootBtn">발사 🚀</button>
+        <button id="replayBtn" disabled>🔁 다시보기</button>
+      </div>
+    </div>
+
+    <div class="stats-bar">
+      <div class="stat"><span class="stat-num" id="statAttempts">0</span><span class="stat-label">시도</span></div>
+      <div class="stat"><span class="stat-num" id="statMakes">0</span><span class="stat-label">성공</span></div>
+      <div class="stat"><span class="stat-num" id="statPct">0%</span><span class="stat-label">성공률</span></div>
+      <div class="stat" id="streakStat"><span class="stat-num" id="statStreak">0</span><span class="stat-label">연속 성공</span></div>
+      <div class="stat"><span class="stat-num" id="statBest">0</span><span class="stat-label">최고 기록</span></div>
+    </div>
+    <div class="history-row" id="historyRow"></div>
+
+    <div id="canvasWrap">
+      <canvas id="canvas" width="900" height="480"></canvas>
+    </div>
+
+    <div class="info-panel">
+      <div class="info-card">
+        <span class="label">입사각 (Entry Angle)</span>
+        <span class="value" id="entryAngleVal">--</span>
+      </div>
+      <div class="info-card">
+        <span class="label">최고 높이</span>
+        <span class="value" id="maxHeightVal">--</span>
+      </div>
+      <div class="info-card result-wait" id="resultCard">
+        <span class="label">슛 결과</span>
+        <span class="value" id="resultVal">대기 중</span>
+        <span class="detail" id="resultDetail">슬라이더를 조절하고 발사 버튼을 눌러보세요.</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ================= 물리 상수 =================
+// v0(파워)는 이제 슬라이더로 조절하는 조작변수입니다.
+const Y0 = 2.0;
+const Y_RIM = 3.05;
+const G = 9.81;
+
+const BALL_RADIUS = 0.121;
+const RIM_RADIUS = 0.2286;
+const RIM_TUBE_RADIUS = 0.02;
+const BACKBOARD_OFFSET = 0.10;
+const BACKBOARD_BOTTOM = Y_RIM - 0.30;
+const BACKBOARD_TOP = Y_RIM + 0.55;
+
+const REST_RIM = 0.55;
+const REST_BOARD = 0.6;
+const REST_GROUND = 0.3;
+const GROUND_FRICTION = 0.55;
+
+const IDLE_POSE = { kneeBend: 0.15, armExtend: 0.12 };
+
+// ================= 캔버스 / 좌표계 (메인 뷰) =================
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+
+const WORLD_HEIGHT = 6.8;
+const MARGIN_LEFT = 55, MARGIN_RIGHT = 30, MARGIN_TOP = 20, MARGIN_BOTTOM = 46;
+
+function worldWidthFor(distance){ return distance + 3.2; }
+
+function getScale(distance){
+  const availW = canvas.width - MARGIN_LEFT - MARGIN_RIGHT;
+  const availH = canvas.height - MARGIN_TOP - MARGIN_BOTTOM;
+  return Math.min(availW / worldWidthFor(distance), availH / WORLD_HEIGHT);
+}
+
+function toCanvas(x, y, distance){
+  const scale = getScale(distance);
+  const px = MARGIN_LEFT + x * scale;
+  const py = canvas.height - MARGIN_BOTTOM - y * scale;
+  return [px, py, scale];
+}
+
+// ================= 확대 뷰(줌 인셋) 좌표계 =================
+const ZOOM_BOX = { x: canvas.width - 300, y: 16, w: 284, h: 190 };
+
+function getZoomRange(distance){
+  const rimX = distance;
+  return {
+    xMin: rimX - 0.85,
+    xMax: rimX + BACKBOARD_OFFSET + RIM_RADIUS + 0.35,
+    yMin: Y_RIM - 0.85,
+    yMax: Y_RIM + 0.95
+  };
+}
+
+function getZoomScale(distance){
+  const r = getZoomRange(distance);
+  const sx = (ZOOM_BOX.w - 16) / (r.xMax - r.xMin);
+  const sy = (ZOOM_BOX.h - 16) / (r.yMax - r.yMin);
+  return Math.min(sx, sy);
+}
+
+function toZoom(x, y, distance){
+  const r = getZoomRange(distance);
+  const scale = getZoomScale(distance);
+  const offX = ZOOM_BOX.x + 8 + ( (ZOOM_BOX.w - 16) - (r.xMax - r.xMin) * scale ) / 2;
+  const offY = ZOOM_BOX.y + 8 + ( (ZOOM_BOX.h - 16) - (r.yMax - r.yMin) * scale ) / 2;
+  const px = offX + (x - r.xMin) * scale;
+  const py = offY + (r.yMax - y) * scale;
+  return [px, py, scale];
+}
+
+// ================= UI 엘리먼트 =================
+const angleSlider = document.getElementById('angleSlider');
+const powerSlider = document.getElementById('powerSlider');
+const distanceSlider = document.getElementById('distanceSlider');
+const angleValue = document.getElementById('angleValue');
+const powerValue = document.getElementById('powerValue');
+const distanceValue = document.getElementById('distanceValue');
+const shootBtn = document.getElementById('shootBtn');
+const replayBtn = document.getElementById('replayBtn');
+const entryAngleVal = document.getElementById('entryAngleVal');
+const maxHeightVal = document.getElementById('maxHeightVal');
+const resultVal = document.getElementById('resultVal');
+const resultDetail = document.getElementById('resultDetail');
+const resultCard = document.getElementById('resultCard');
+
+const statAttempts = document.getElementById('statAttempts');
+const statMakes = document.getElementById('statMakes');
+const statPct = document.getElementById('statPct');
+const statStreak = document.getElementById('statStreak');
+const statBest = document.getElementById('statBest');
+const streakStat = document.getElementById('streakStat');
+const historyRow = document.getElementById('historyRow');
+
+let isAnimating = false;
+let lastShotPath = null;
+let lastShotDistance = null;
+
+// ================= 기록(스트릭/히스토리) 상태 =================
+const stats = { attempts: 0, makes: 0, streak: 0, best: 0, history: [] };
+
+function updateStatsUI(){
+  statAttempts.textContent = stats.attempts;
+  statMakes.textContent = stats.makes;
+  statPct.textContent = stats.attempts === 0 ? '0%' : Math.round(stats.makes / stats.attempts * 100) + '%';
+  statStreak.textContent = stats.streak;
+  statBest.textContent = stats.best;
+  streakStat.classList.toggle('streak-hot', stats.streak >= 3);
+
+  historyRow.innerHTML = '';
+  stats.history.slice(-10).forEach(type => {
+    const dot = document.createElement('div');
+    dot.className = 'hist-dot ' + type;
+    historyRow.appendChild(dot);
+  });
+}
+
+function recordShot(resultType){
+  stats.attempts++;
+  stats.history.push(resultType);
+  if (resultType === 'miss'){
+    stats.streak = 0;
+  } else {
+    stats.makes++;
+    stats.streak++;
+    if (stats.streak > stats.best) stats.best = stats.streak;
+    if (stats.streak > 0 && stats.streak % 3 === 0) playBuzzer();
+  }
+  updateStatsUI();
+}
+
+// ================= 사운드 (Web Audio API로 직접 합성) =================
+let audioCtx = null;
+function ensureAudio(){
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+}
+
+function playClank(isBoard){
+  ensureAudio();
+  const t0 = audioCtx.currentTime;
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  const freqStart = isBoard ? 480 : 720;
+  osc.type = 'square';
+  osc.frequency.setValueAtTime(freqStart, t0);
+  osc.frequency.exponentialRampToValueAtTime(freqStart * 0.4, t0 + 0.12);
+  gain.gain.setValueAtTime(0.16, t0);
+  gain.gain.exponentialRampToValueAtTime(0.001, t0 + 0.15);
+  osc.connect(gain); gain.connect(audioCtx.destination);
+  osc.start(t0); osc.stop(t0 + 0.16);
+}
+
+function playSwish(){
+  ensureAudio();
+  const duration = 0.35;
+  const bufferSize = Math.floor(audioCtx.sampleRate * duration);
+  const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < bufferSize; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / bufferSize);
+  const noise = audioCtx.createBufferSource();
+  noise.buffer = buffer;
+  const filter = audioCtx.createBiquadFilter();
+  filter.type = 'bandpass';
+  filter.frequency.value = 2600;
+  filter.Q.value = 0.7;
+  const gain = audioCtx.createGain();
+  gain.gain.setValueAtTime(0.32, audioCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+  noise.connect(filter); filter.connect(gain); gain.connect(audioCtx.destination);
+  noise.start();
+}
+
+function playBuzzer(){
+  ensureAudio();
+  const t0 = audioCtx.currentTime;
+  [0, 0.16].forEach((d, i) => {
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(200 + i * 60, t0 + d);
+    gain.gain.setValueAtTime(0.14, t0 + d);
+    gain.gain.exponentialRampToValueAtTime(0.001, t0 + d + 0.13);
+    osc.connect(gain); gain.connect(audioCtx.destination);
+    osc.start(t0 + d); osc.stop(t0 + d + 0.15);
+  });
+}
+
+function playCheer(){
+  ensureAudio();
+  const t0 = audioCtx.currentTime;
+  [0, 0.05, 0.1].forEach((d, i) => {
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(520 + i * 140, t0 + d);
+    gain.gain.setValueAtTime(0.12, t0 + d);
+    gain.gain.exponentialRampToValueAtTime(0.001, t0 + d + 0.3);
+    osc.connect(gain); gain.connect(audioCtx.destination);
+    osc.start(t0 + d); osc.stop(t0 + d + 0.32);
+  });
+  const dur = 0.4;
+  const bufferSize = Math.floor(audioCtx.sampleRate * dur);
+  const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < bufferSize; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / bufferSize) * 0.6;
+  const noise = audioCtx.createBufferSource();
+  noise.buffer = buffer;
+  const filter = audioCtx.createBiquadFilter();
+  filter.type = 'highpass';
+  filter.frequency.value = 1800;
+  const gain = audioCtx.createGain();
+  gain.gain.setValueAtTime(0.25, t0);
+  gain.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
+  noise.connect(filter); filter.connect(gain); gain.connect(audioCtx.destination);
+  noise.start(t0);
+}
+
+function playGroan(){
+  ensureAudio();
+  const t0 = audioCtx.currentTime;
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(300, t0);
+  osc.frequency.exponentialRampToValueAtTime(140, t0 + 0.4);
+  gain.gain.setValueAtTime(0.14, t0);
+  gain.gain.exponentialRampToValueAtTime(0.001, t0 + 0.45);
+  osc.connect(gain); gain.connect(audioCtx.destination);
+  osc.start(t0); osc.stop(t0 + 0.46);
+}
+
+// ================= 파티클(컨페티) =================
+let particles = [];
+function spawnConfetti(px, py){
+  const colors = ['#ff8a3d', '#ff5e3a', '#ffd166', '#e8e8f0', '#4ade80'];
+  for (let i = 0; i < 36; i++){
+    const angle = Math.random() * Math.PI * 2;
+    const speed = 1 + Math.random() * 3.5;
+    particles.push({
+      x: px, y: py,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed - 2.2,
+      life: 1,
+      decay: 0.012 + Math.random() * 0.012,
+      size: 2 + Math.random() * 3,
+      color: colors[Math.floor(Math.random() * colors.length)],
+      rot: Math.random() * Math.PI * 2,
+      vrot: (Math.random() - 0.5) * 0.3
+    });
+  }
+}
+
+function updateAndDrawParticles(){
+  particles.forEach(p => {
+    p.vy += 0.12;
+    p.x += p.vx; p.y += p.vy;
+    p.life -= p.decay;
+    p.rot += p.vrot;
+  });
+  particles = particles.filter(p => p.life > 0 && p.y < canvas.height + 20);
+  particles.forEach(p => {
+    ctx.save();
+    ctx.globalAlpha = Math.max(p.life, 0);
+    ctx.translate(p.x, p.y);
+    ctx.rotate(p.rot);
+    ctx.fillStyle = p.color;
+    ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 0.6);
+    ctx.restore();
+  });
+  ctx.globalAlpha = 1;
+}
+
+// ================= 화면 흔들림 & 그물 출렁임 =================
+let shakeMag = 0;
+function triggerShake(m){ shakeMag = Math.max(shakeMag, m); }
+let netSwing = 0;
+
+// ================= UI 라벨/초기화 =================
+function updateLabels(){
+  angleValue.textContent = angleSlider.value + '°';
+  powerValue.textContent = parseFloat(powerSlider.value).toFixed(1) + ' m/s';
+  distanceValue.textContent = parseFloat(distanceSlider.value).toFixed(1) + ' m';
+}
+
+function resetInfoPanel(){
+  entryAngleVal.textContent = '--';
+  maxHeightVal.textContent = '--';
+  resultVal.textContent = '대기 중';
+  resultDetail.textContent = '슬라이더를 조절하고 발사 버튼을 눌러보세요.';
+  resultCard.className = 'info-card result-wait';
+}
+
+function setControlsDisabled(disabled){
+  angleSlider.disabled = disabled;
+  powerSlider.disabled = disabled;
+  distanceSlider.disabled = disabled;
+  shootBtn.disabled = disabled;
+  replayBtn.disabled = disabled || !lastShotPath;
+}
+
+// ================= 정적(발사 전) 화면 =================
+function renderStatic(){
+  const distance = parseFloat(distanceSlider.value);
+  const scale = getScale(distance);
+  drawCourt(distance);
+  drawHoop(distance, 0);
+  const hand = drawPlayer(distance, IDLE_POSE);
+  drawBallAt(ctx, hand.handX, hand.handY, BALL_RADIUS * scale, 0);
+  drawZoomInset(distance, null, 0);
+}
+
+// ================= 그리기: 코트 =================
+function drawCourt(distance){
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+  grad.addColorStop(0, '#0d0e1c');
+  grad.addColorStop(1, '#0a0b16');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  const [, groundPy] = toCanvas(0, 0, distance);
+  ctx.fillStyle = '#181a2e';
+  ctx.fillRect(0, groundPy, canvas.width, canvas.height - groundPy);
+  ctx.strokeStyle = '#2c3050';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(0, groundPy);
+  ctx.lineTo(canvas.width, groundPy);
+  ctx.stroke();
+
+  const ww = worldWidthFor(distance);
+  ctx.font = '10px sans-serif';
+  ctx.fillStyle = '#3d4165';
+  for (let m = 0; m <= Math.floor(ww); m++){
+    const [px, py] = toCanvas(m, 0, distance);
+    ctx.beginPath();
+    ctx.moveTo(px, py);
+    ctx.lineTo(px, py + 6);
+    ctx.strokeStyle = '#2c3050';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    if (m % 2 === 0) ctx.fillText(m + 'm', px - 6, py + 20);
+  }
+}
+
+// ================= 그리기: 사실적인 선수 (관절 애니메이션) =================
+function drawLimbPath(x1, y1, x2, y2, x3, y3, width, color){
+  ctx.strokeStyle = color;
+  ctx.lineWidth = width;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  ctx.moveTo(x1, y1);
+  ctx.lineTo(x2, y2);
+  ctx.lineTo(x3, y3);
+  ctx.stroke();
+}
+
+// pose = { kneeBend: 0(선 자세)~1(완전히 웅크림), armExtend: 0(팔 굽힘)~1(완전히 뻗음) }
+// 반환값: 슈팅 손 위치(px,py) — 발사 전 공을 손 위에 그릴 때 사용
+function drawPlayer(distance, pose){
+  const [px, py] = toCanvas(0, 0, distance);
+  const scale = getScale(distance);
+  const kb = pose ? pose.kneeBend : 0.15;
+  const ae = pose ? pose.armExtend : 0.12;
+
+  const jersey = '#3b3f6b';
+  const jerseyDark = '#262a4d';
+  const shortsColor = '#1c1e38';
+  const skin = '#caa06e';
+  const skinDark = '#a9825a';
+  const shoeColor = '#101223';
+  const hairColor = '#181820';
+
+  const hipY = py - (0.95 - 0.30 * kb) * scale;
+  const hipX = px + 0.04 * kb * scale;
+  const kneeY = py - (0.52 - 0.20 * kb) * scale;
+  const kneeXOff = 0.10 * kb * scale;
+  const shoulderY = hipY - 0.52 * scale;
+  const shoulderX = hipX;
+  const headR = 0.125 * scale;
+  const headCy = shoulderY - 0.10 * scale - headR;
+
+  const handY = shoulderY - (0.10 + 0.80 * ae) * scale;
+  const handX = shoulderX + (0.06 + 0.09 * ae) * scale;
+  const elbowY = shoulderY - (0.04 + 0.38 * ae) * scale;
+  const elbowX = shoulderX + (0.20 - 0.12 * ae) * scale;
+
+  const supElbowY = shoulderY + 0.16 * scale;
+  const supElbowX = shoulderX - 0.15 * scale;
+  const supHandY = supElbowY + 0.14 * scale;
+  const supHandX = shoulderX - 0.09 * scale;
+
+  const legGap = 0.085 * scale;
+  const limbW = Math.max(3, 0.075 * scale);
+
+  // 뒤쪽 다리(지지 다리)
+  drawLimbPath(hipX - legGap, hipY, hipX - legGap + kneeXOff, kneeY, px - legGap * 1.2, py, limbW, skinDark);
+  ctx.fillStyle = shoeColor;
+  ctx.beginPath(); ctx.ellipse(px - legGap * 1.2, py, 0.09 * scale, 0.045 * scale, 0, 0, Math.PI * 2); ctx.fill();
+
+  // 앞쪽 다리
+  drawLimbPath(hipX + legGap, hipY, hipX + legGap + kneeXOff, kneeY, px + legGap * 0.9, py, limbW, skin);
+  ctx.beginPath(); ctx.ellipse(px + legGap * 0.9, py, 0.09 * scale, 0.045 * scale, 0, 0, Math.PI * 2); ctx.fill();
+
+  // 반바지
+  ctx.fillStyle = shortsColor;
+  ctx.beginPath();
+  ctx.moveTo(hipX - legGap - 0.06 * scale, hipY - 0.02 * scale);
+  ctx.lineTo(hipX + legGap + 0.06 * scale, hipY - 0.02 * scale);
+  ctx.lineTo(hipX + legGap * 0.6, kneeY - 0.06 * scale);
+  ctx.lineTo(hipX - legGap * 0.6, kneeY - 0.06 * scale);
+  ctx.closePath();
+  ctx.fill();
+
+  // 지지팔 (몸통보다 먼저 그려서 뒤쪽에 위치)
+  drawLimbPath(shoulderX - 0.05 * scale, shoulderY, supElbowX, supElbowY, supHandX, supHandY, limbW * 0.85, skinDark);
+  ctx.fillStyle = skinDark;
+  ctx.beginPath(); ctx.arc(supHandX, supHandY, 0.045 * scale, 0, Math.PI * 2); ctx.fill();
+
+  // 몸통 (저지)
+  ctx.fillStyle = jersey;
+  ctx.beginPath();
+  ctx.moveTo(shoulderX - 0.20 * scale, shoulderY);
+  ctx.lineTo(shoulderX + 0.20 * scale, shoulderY);
+  ctx.lineTo(hipX + 0.15 * scale, hipY);
+  ctx.lineTo(hipX - 0.15 * scale, hipY);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = jerseyDark;
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // 등번호
+  ctx.fillStyle = 'rgba(255,255,255,0.85)';
+  ctx.font = `bold ${Math.max(9, 0.14 * scale)}px sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.fillText('7', shoulderX, (shoulderY + hipY) / 2 + 0.05 * scale);
+  ctx.textAlign = 'left';
+
+  // 슈팅팔 (몸통 위에 그려서 앞쪽에 위치)
+  drawLimbPath(shoulderX + 0.05 * scale, shoulderY, elbowX, elbowY, handX, handY, limbW * 0.9, skin);
+  ctx.fillStyle = skin;
+  ctx.beginPath(); ctx.arc(handX, handY, 0.05 * scale, 0, Math.PI * 2); ctx.fill();
+
+  // 머리
+  ctx.fillStyle = skin;
+  ctx.beginPath(); ctx.arc(shoulderX + 0.02 * scale, headCy, headR, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = hairColor;
+  ctx.beginPath();
+  ctx.arc(shoulderX + 0.02 * scale, headCy - headR * 0.18, headR * 0.98, Math.PI * 1.02, Math.PI * 1.98);
+  ctx.fill();
+  // 간단한 표정
+  ctx.fillStyle = '#2a2a2a';
+  ctx.beginPath(); ctx.arc(shoulderX + 0.06 * scale, headCy + headR * 0.05, headR * 0.09, 0, Math.PI * 2); ctx.fill();
+
+  return { handX, handY };
+}
+
+// ================= 그리기: 골대 =================
+function hoopGeometry(distance){
+  const rimX = distance;
+  const frontX = rimX - RIM_RADIUS;
+  const backX = rimX + RIM_RADIUS;
+  const backboardX = backX + BACKBOARD_OFFSET;
+  return { rimX, frontX, backX, backboardX };
+}
+
+function drawHoopOn(context, mapFn, distance, detailed, swing){
+  const { rimX, frontX, backX, backboardX } = hoopGeometry(distance);
+  const swingPx = swing > 0.01 ? swing * 9 * Math.sin(performance.now() / 55) : 0;
+
+  const [bbPx, bbTopPy] = mapFn(backboardX, BACKBOARD_TOP, distance);
+  const [, bbBotPy] = mapFn(backboardX, BACKBOARD_BOTTOM, distance);
+  context.fillStyle = '#e8e8f0';
+  context.globalAlpha = 0.9;
+  context.fillRect(bbPx - (detailed ? 4 : 3), bbTopPy, (detailed ? 8 : 6), bbBotPy - bbTopPy);
+  context.globalAlpha = 1;
+
+  if (!detailed){
+    context.strokeStyle = '#3d4165';
+    context.lineWidth = 4;
+    const [, floorPy] = mapFn(0, 0, distance);
+    context.beginPath();
+    context.moveTo(bbPx, bbBotPy);
+    context.lineTo(bbPx, floorPy);
+    context.stroke();
+  }
+
+  const [frontPx, rimPy, scale] = mapFn(frontX, Y_RIM, distance);
+  const [backPx] = mapFn(backX, Y_RIM, distance);
+  const tubePx = RIM_TUBE_RADIUS * scale;
+
+  context.strokeStyle = '#ff6a3a';
+  context.lineWidth = detailed ? 2 : 4;
+  context.lineCap = 'round';
+  context.beginPath();
+  context.moveTo(frontPx, rimPy);
+  context.lineTo(backPx, rimPy);
+  context.stroke();
+
+  context.fillStyle = '#ff8a52';
+  context.beginPath(); context.arc(frontPx, rimPy, Math.max(tubePx, detailed ? 4 : 3), 0, Math.PI * 2); context.fill();
+  context.beginPath(); context.arc(backPx, rimPy, Math.max(tubePx, detailed ? 4 : 3), 0, Math.PI * 2); context.fill();
+
+  context.strokeStyle = 'rgba(232,232,240,0.55)';
+  context.lineWidth = 1;
+  const netBottomPy = rimPy + 0.42 * scale;
+  const netSteps = 6;
+  for (let i = 0; i <= netSteps; i++){
+    const fx = frontPx + (backPx - frontPx) * (i / netSteps);
+    const [bxPx] = mapFn(frontX + (backX - frontX) * 0.15 + (backX - frontX) * 0.7 * (i / netSteps), 0, distance);
+    context.beginPath();
+    context.moveTo(fx, rimPy);
+    context.lineTo(bxPx + swingPx, netBottomPy);
+    context.stroke();
+  }
+  for (let j = 1; j <= 2; j++){
+    const yy = rimPy + (netBottomPy - rimPy) * (j / 3);
+    const inset = RIM_RADIUS * (1 - j / 4) * 0.9;
+    const [lx] = mapFn(rimX - inset, 0, distance);
+    const [rx] = mapFn(rimX + inset, 0, distance);
+    context.beginPath();
+    context.moveTo(lx + swingPx * (j / 3), yy);
+    context.lineTo(rx + swingPx * (j / 3), yy);
+    context.stroke();
+  }
+}
+
+function drawHoop(distance, swing){ drawHoopOn(ctx, toCanvas, distance, false, swing); }
+
+// ================= 그리기: 공 & 그림자 =================
+function drawBall(x, y, distance, rotation){
+  const [px, py, scale] = toCanvas(x, Math.max(y, 0), distance);
+  drawBallAt(ctx, px, py, BALL_RADIUS * scale, rotation || 0);
+}
+
+function drawBallAt(context, px, py, r, rotation){
+  context.save();
+  context.translate(px, py);
+  context.rotate(rotation || 0);
+  const g = context.createRadialGradient(-r * 0.3, -r * 0.3, r * 0.2, 0, 0, r);
+  g.addColorStop(0, '#ffb066');
+  g.addColorStop(1, '#e8562b');
+  context.fillStyle = g;
+  context.beginPath(); context.arc(0, 0, r, 0, Math.PI * 2); context.fill();
+  context.strokeStyle = '#0a0b16'; context.lineWidth = 1; context.stroke();
+  context.strokeStyle = 'rgba(10,11,22,0.5)';
+  context.lineWidth = Math.max(0.6, r * 0.05);
+  context.beginPath();
+  context.moveTo(-r, 0); context.lineTo(r, 0);
+  context.moveTo(0, -r); context.lineTo(0, r);
+  context.stroke();
+  context.restore();
+}
+
+function drawBallShadow(worldX, height, distance){
+  const [px, floorPy, scale] = toCanvas(worldX, 0, distance);
+  const t = Math.max(0, 1 - height / 4.2);
+  const size = (0.10 + 0.05 * t) * scale;
+  ctx.save();
+  ctx.globalAlpha = 0.12 + 0.35 * t;
+  ctx.fillStyle = '#000000';
+  ctx.beginPath();
+  ctx.ellipse(px, floorPy, size, size * 0.35, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+// ================= 확대 뷰(줌 인셋) 렌더 =================
+function drawZoomInset(distance, ballState, rotation){
+  ctx.save();
+  ctx.fillStyle = 'rgba(11,12,23,0.92)';
+  ctx.strokeStyle = '#2c3050';
+  ctx.lineWidth = 1.5;
+  roundRect(ctx, ZOOM_BOX.x, ZOOM_BOX.y, ZOOM_BOX.w, ZOOM_BOX.h, 10);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.font = 'bold 11px sans-serif';
+  ctx.fillStyle = '#ff8a3d';
+  ctx.fillText('🔍 골대 확대 뷰', ZOOM_BOX.x + 10, ZOOM_BOX.y + 16);
+
+  ctx.beginPath();
+  ctx.rect(ZOOM_BOX.x + 4, ZOOM_BOX.y + 22, ZOOM_BOX.w - 8, ZOOM_BOX.h - 28);
+  ctx.clip();
+
+  ctx.fillStyle = '#14162a';
+  ctx.fillRect(ZOOM_BOX.x, ZOOM_BOX.y + 22, ZOOM_BOX.w, ZOOM_BOX.h);
+
+  drawHoopOn(ctx, toZoom, distance, true, netSwing);
+
+  if (ballState){
+    const [bpx, bpy, bscale] = toZoom(ballState.x, Math.max(ballState.y, -1), distance);
+    if (bpx > ZOOM_BOX.x - 20 && bpx < ZOOM_BOX.x + ZOOM_BOX.w + 20){
+      drawBallAt(ctx, bpx, bpy, BALL_RADIUS * bscale, rotation || 0);
+    }
+  }
+  ctx.restore();
+}
+
+function roundRect(context, x, y, w, h, r){
+  context.beginPath();
+  context.moveTo(x + r, y);
+  context.arcTo(x + w, y, x + w, y + h, r);
+  context.arcTo(x + w, y + h, x, y + h, r);
+  context.arcTo(x, y + h, x, y, r);
+  context.arcTo(x, y, x + w, y, r);
+  context.closePath();
+}
+
+// ================= 물리 시뮬레이션 (충돌 포함) =================
+function createSimulation(angleDeg, v0, distance){
+  const angleRad = angleDeg * Math.PI / 180;
+  const { frontX, backX, backboardX } = hoopGeometry(distance);
+
+  const sim = {
+    x: 0.15, y: Y0,
+    vx: v0 * Math.cos(angleRad), vy: v0 * Math.sin(angleRad),
+    t: 0,
+    path: [{ x: 0.15, y: Y0 }],
+    bounced: false, scored: false, finished: false,
+    entryAngle: null, entryCaptured: false,
+    maxHeight: Y0 + Math.pow(v0 * Math.sin(angleRad), 2) / (2 * G),
+    bounceEvent: null,
+    restBounces: 0,
+    soundCooldown: 0
+  };
+
+  sim.step = function(dt){
+    if (sim.finished) return;
+    sim.bounceEvent = null;
+    if (sim.soundCooldown > 0) sim.soundCooldown--;
+
+    sim.vy -= G * dt;
+    sim.x += sim.vx * dt;
+    const prevY = sim.y;
+    sim.y += sim.vy * dt;
+    sim.t += dt;
+
+    if (!sim.entryCaptured && sim.x >= distance){
+      sim.entryCaptured = true;
+      sim.entryAngle = Math.atan2(-sim.vy, sim.vx) * 180 / Math.PI;
+    }
+
+    [frontX, backX].forEach((postX) => {
+      const dx = sim.x - postX;
+      const dy = sim.y - Y_RIM;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const minDist = BALL_RADIUS + RIM_TUBE_RADIUS;
+      if (dist < minDist && dist > 0.0001){
+        const speedBefore = Math.hypot(sim.vx, sim.vy);
+        const nx = dx / dist, ny = dy / dist;
+        const overlap = minDist - dist;
+        sim.x += nx * overlap;
+        sim.y += ny * overlap;
+        const dot = sim.vx * nx + sim.vy * ny;
+        sim.vx -= (1 + REST_RIM) * dot * nx;
+        sim.vy -= (1 + REST_RIM) * dot * ny;
+        sim.bounced = true;
+        if (sim.soundCooldown === 0){
+          sim.bounceEvent = { type: 'rim', speed: speedBefore };
+          sim.soundCooldown = 10;
+        }
+      }
+    });
+
+    if (sim.x + BALL_RADIUS > backboardX &&
+        sim.y > BACKBOARD_BOTTOM && sim.y < BACKBOARD_TOP &&
+        sim.vx > 0){
+      const speedBefore = Math.hypot(sim.vx, sim.vy);
+      sim.x = backboardX - BALL_RADIUS;
+      sim.vx = -sim.vx * REST_BOARD;
+      sim.bounced = true;
+      if (sim.soundCooldown === 0){
+        sim.bounceEvent = { type: 'backboard', speed: speedBefore };
+        sim.soundCooldown = 10;
+      }
+    }
+
+    if (!sim.scored && prevY >= Y_RIM && sim.y < Y_RIM){
+      const innerMargin = BALL_RADIUS * 0.6;
+      if (sim.x > frontX + innerMargin && sim.x < backX - innerMargin) sim.scored = true;
+    }
+
+    if (sim.y - BALL_RADIUS < 0){
+      sim.y = BALL_RADIUS;
+      sim.vy = -sim.vy * REST_GROUND;
+      sim.vx *= GROUND_FRICTION;
+      sim.restBounces++;
+      if (Math.abs(sim.vy) < 0.6 || sim.restBounces > 2) sim.finished = true;
+    }
+
+    if (sim.scored && sim.y < Y_RIM - 0.55) sim.finished = true;
+    if (sim.x > distance + 3.5 || sim.t > 6) sim.finished = true;
+
+    sim.path.push({ x: sim.x, y: sim.y });
+  };
+
+  return sim;
+}
+
+function judgeResult(sim){
+  if (sim.scored){
+    if (!sim.bounced){
+      return { result: 'Clean Swish', cls: 'result-swish', type: 'swish',
+        detail: '림에 닿지 않고 깨끗하게 그물을 가르며 골 성공!' };
+    }
+    return { result: 'Rim Hit', cls: 'result-rim', type: 'rim',
+      detail: '림 또는 백보드에 맞고 튕긴 뒤 골이 들어갔습니다.' };
+  }
+  if (sim.bounced){
+    return { result: 'Short Goal', cls: 'result-short', type: 'miss',
+      detail: '림/백보드에 맞고 튕겨 나가 골이 들어가지 않았습니다.' };
+  }
+  return { result: 'Short Goal', cls: 'result-short', type: 'miss',
+    detail: '골대에 닿지도 못하고 짧거나 길게 빗나갔습니다.' };
+}
+
+// ================= 슈팅 동작(와인드업) + 발사 애니메이션 =================
+const WINDUP_MS = 260;
+
+function animateShot(){
+  if (isAnimating) return;
+  isAnimating = true;
+  setControlsDisabled(true);
+  ensureAudio();
+
+  const angle = parseFloat(angleSlider.value);
+  const power = parseFloat(powerSlider.value);
+  const distance = parseFloat(distanceSlider.value);
+  const scale = getScale(distance);
+
+  entryAngleVal.textContent = '--';
+  maxHeightVal.textContent = '--';
+  resultVal.textContent = '진행 중...';
+  resultDetail.textContent = '';
+  resultCard.className = 'info-card result-wait';
+
+  const startTime = performance.now();
+
+  function windupFrame(now){
+    const p = Math.min(1, (now - startTime) / WINDUP_MS);
+    const kneeBend = p < 0.5 ? p * 2 : 1 - (p - 0.5) * 2;
+    const armExtend = p * p;
+
+    drawCourt(distance);
+    drawHoop(distance, 0);
+    const hand = drawPlayer(distance, { kneeBend, armExtend });
+    drawBallAt(ctx, hand.handX, hand.handY, BALL_RADIUS * scale, -p * 3);
+    drawZoomInset(distance, null, 0);
+
+    if (p < 1){
+      requestAnimationFrame(windupFrame);
+    } else {
+      startFlight();
+    }
+  }
+
+  function startFlight(){
+    const sim = createSimulation(angle, power, distance);
+    maxHeightVal.textContent = sim.maxHeight.toFixed(2) + ' m';
+    shakeMag = 0;
+    let confettiSpawned = false;
+
+    const dt = 0.0035;
+    const subStepsPerFrame = 6;
+
+    function frame(){
+      for (let i = 0; i < subStepsPerFrame && !sim.finished; i++){
+        sim.step(dt);
+        if (sim.bounceEvent){
+          playClank(sim.bounceEvent.type === 'backboard');
+          triggerShake(Math.min(14, sim.bounceEvent.speed * 1.3));
+        }
+        if (sim.scored && !confettiSpawned){
+          confettiSpawned = true;
+          netSwing = 1;
+          playSwish();
+          const [rpx, rpy] = toCanvas(distance, Y_RIM, distance);
+          spawnConfetti(rpx, rpy);
+        }
+      }
+
+      netSwing *= 0.92;
+      if (netSwing < 0.02) netSwing = 0;
+
+      ctx.save();
+      if (shakeMag > 0.3){
+        ctx.translate((Math.random() - 0.5) * shakeMag, (Math.random() - 0.5) * shakeMag);
+        shakeMag *= 0.85;
+      } else {
+        shakeMag = 0;
+      }
+
+      const rotation = -sim.t * 7;
+      const followP = Math.min(1, sim.t / 0.55);
+      const pose = { kneeBend: 0.15 * followP, armExtend: 1 - 0.88 * followP };
+
+      drawCourt(distance);
+      drawHoop(distance, netSwing);
+      drawPlayer(distance, pose);
+      drawTrail(sim.path, distance);
+      drawBallShadow(sim.x, sim.y, distance);
+      drawBall(sim.x, sim.y, distance, rotation);
+      updateAndDrawParticles();
+      drawZoomInset(distance, sim, rotation);
+      ctx.restore();
+
+      if (sim.entryAngle !== null && entryAngleVal.textContent === '--'){
+        entryAngleVal.textContent = sim.entryAngle.toFixed(1) + '°';
+      }
+
+      if (!sim.finished){
+        requestAnimationFrame(frame);
+      } else {
+        const judged = judgeResult(sim);
+        entryAngleVal.textContent = sim.entryAngle !== null ? sim.entryAngle.toFixed(1) + '°' : '해당없음';
+        resultVal.textContent = judged.result;
+        resultDetail.textContent = judged.detail;
+        resultCard.className = 'info-card ' + judged.cls;
+
+        if (judged.type === 'miss') playGroan(); else playCheer();
+        recordShot(judged.type);
+
+        lastShotPath = sim.path;
+        lastShotDistance = distance;
+
+        isAnimating = false;
+        setControlsDisabled(false);
+      }
+    }
+    requestAnimationFrame(frame);
+  }
+
+  requestAnimationFrame(windupFrame);
+}
+
+function drawTrail(path, distance){
+  if (path.length < 2) return;
+  ctx.strokeStyle = 'rgba(255, 154, 82, 0.75)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  path.forEach((p, i) => {
+    const [px, py] = toCanvas(p.x, Math.max(p.y, -1), distance);
+    if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+  });
+  ctx.stroke();
+}
+
+// ================= 슬로우 리플레이 =================
+function playReplay(){
+  if (!lastShotPath || isAnimating) return;
+  isAnimating = true;
+  setControlsDisabled(true);
+
+  const path = lastShotPath;
+  const distance = lastShotDistance;
+  const frameStep = Math.max(1, Math.floor(path.length / 260));
+  let idx = 0;
+
+  function rf(){
+    drawCourt(distance);
+    drawHoop(distance, 0);
+    drawPlayer(distance, IDLE_POSE);
+
+    ctx.strokeStyle = 'rgba(255, 154, 82, 0.5)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (let i = 0; i <= idx; i += frameStep){
+      const p = path[Math.min(i, path.length - 1)];
+      const [px, py] = toCanvas(p.x, Math.max(p.y, -1), distance);
+      if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+    }
+    ctx.stroke();
+
+    const cur = path[Math.min(idx, path.length - 1)];
+    drawBallShadow(cur.x, cur.y, distance);
+    drawBall(cur.x, cur.y, distance, -idx * 0.12);
+    drawZoomInset(distance, cur, -idx * 0.12);
+
+    idx += frameStep;
+    if (idx < path.length){
+      requestAnimationFrame(rf);
+    } else {
+      isAnimating = false;
+      setControlsDisabled(false);
+    }
+  }
+  requestAnimationFrame(rf);
+}
+
+// ================= 이벤트 바인딩 =================
+angleSlider.addEventListener('input', () => { updateLabels(); if (!isAnimating) renderStatic(); });
+powerSlider.addEventListener('input', () => { updateLabels(); if (!isAnimating) renderStatic(); });
+distanceSlider.addEventListener('input', () => { updateLabels(); if (!isAnimating) renderStatic(); });
+shootBtn.addEventListener('click', animateShot);
+replayBtn.addEventListener('click', playReplay);
+
+// ================= 초기화 =================
+updateLabels();
+resetInfoPanel();
+updateStatsUI();
+renderStatic();
+</script>
+</body>
+</html>
